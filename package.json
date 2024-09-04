@@ -1,17 +1,16 @@
 {
-  "name": "ttvchatmoves",
+  "name": "lichessprediction",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Andrew Yatzkan",
   "license": "ISC",
   "dependencies": {
-    "chess.js": "^0.11.0",
-    "express": "^4.17.1",
-    "socket.io": "^2.3.0",
-    "tmi.js": "^1.5.0"
+    "@twurple/api": "^7.1.0",
+    "tmi.js": "^1.8.5"
   }
 }

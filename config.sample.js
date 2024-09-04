@@ -1,11 +1,7 @@
 module.exports = {
-  STREAMER_TWITCH: '',
-  STREAMER_LICHESS: '',
-  AUTHORIZED_USERS: [],
-  BOT_TWITCH_OAUTH: 'oauth:...',
-  BOT_LICHESS: '',
-  BOT_LICHESS_OAUTH: 'lip_...',
-  CHAT_COOLDOWN: 2000, // in ms
-  VOTING_PERIOD: 20, // in s
-  ACKNOWLEDGE_VOTE: false,
+  LICHESS_API_TOKEN: 'lip_...',
+  TWITCH_API_CLIENT_ID: '',
+  TWITCH_API_TOKEN: '',
+  TWITCH_CHANNEL: '',
+  PREDICTION_PERIOD: 60, // in s
 };
