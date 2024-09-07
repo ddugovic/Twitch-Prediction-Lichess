@@ -22,7 +22,7 @@ async function getLichessId() {
 
   user = await fetch('https://lichess.org/api/account', {headers: headers})
     .then((res) => res.json());
-  console.log(`Lichess streamer: ${user?.streamer?.twitch?.channel}`);
+  console.log(`Lichess streamer: ${user.streamer?.twitch?.channel}`);
   lichessName = user.title ? `${user.title} ${user.username}` : user.username;
 }
 
