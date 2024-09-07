@@ -61,7 +61,7 @@ async function streamIncomingEvents() {
       }
       if (json.type == 'gameFinish' && game.id == gameId && prediction) {
         console.log(`Game ${game.id} finished!`);
-        endPrediction(game.winner || game.status?.name);
+        endPrediction(game.winner || game.status);
         gameColor = undefined;
         gameId = undefined;
         prediction = undefined;
