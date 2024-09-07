@@ -111,7 +111,7 @@ async function endPrediction(gameId) {
   const outcomes = prediction.outcomes;
   game = await getPlayStrategyGame(gameId);
   let outcomeId;
-  switch (game.winner || game.status?.name) {
+  switch (game.winner || game.status) {
     case gameColor:
       console.log(`- ${playstrategyName} won!`);
       outcomeId = outcomes[0].id;
@@ -127,7 +127,7 @@ async function endPrediction(gameId) {
       outcomeId = outcomes[2].id;
       break;
     default:
-      console.log(`- Game ${outcome}!`);
+      console.log(`- Game ${game.status}!`);
   }
   if (outcomeId) {
     resolvePrediction(predictionId, outcomeId);
