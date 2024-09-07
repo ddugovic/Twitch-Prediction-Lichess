@@ -1,5 +1,5 @@
 const OPTS = require('./config.js');
-const USER_AGENT = 'Twitch-Prediction-Lichess';
+const USER_AGENT = 'Twitch-Prediction-PlayStrategy';
 
 const { StaticAuthProvider } = require('@twurple/auth');
 const { ApiClient } = require('@twurple/api');
@@ -9,31 +9,44 @@ const api = new ApiClient({ authProvider });
 let broadcaster;
 let prediction;
 
-let lichessName;
+let playstrategyName;
+let p1, p2;
 let gameColor;
 let gameId;
 
-async function getLichessId() {
-  // https://lichess.org/api#tag/Account/operation/accountMe
+async function getPlayStrategyId() {
+  // https://playstrategy.org/api#tag/Account/operation/accountMe
   const headers = {
-    Authorization: `Bearer ${OPTS.LICHESS_API_TOKEN}`,
+    Authorization: `Bearer ${OPTS.PLAYSTRATEGY_API_TOKEN}`,
     'User-Agent': USER_AGENT
   };
 
-  user = await fetch('https://lichess.org/api/account', {headers: headers})
+  user = await fetch('https://playstrategy.org/api/account', {headers: headers})
     .then((res) => res.json());
-  console.log(`Lichess streamer: ${user.streamer?.twitch?.channel}`);
-  lichessName = user.title ? `${user.title} ${user.username}` : user.username;
+  console.log(`PlayStrategy user: ${user.username}`);
+  playstrategyName = user.title ? `${user.title} ${user.username}` : user.username;
+}
+
+async function getPlayStrategyGame(gameId) {
+  // https://playstrategy.org/game/export/{gameId}
+  const headers = {
+    Accept: 'application/json',
+    Authorization: `Bearer ${OPTS.LISHOGI_API_TOKEN}`,
+    'User-Agent': USER_AGENT
+  };
+
+  return await fetch(`https://playstrategy.org/game/export/${gameId}`, {headers: headers})
+    .then((res) => res.json());
 }
 
 async function streamIncomingEvents() {
-  // https://lichess.org/api#tag/Board/operation/apiStreamEvent
+  // https://playstrategy.org/api#tag/Board/operation/apiStreamEvent
   const headers = {
-    Authorization: `Bearer ${OPTS.LICHESS_API_TOKEN}`,
+    Authorization: `Bearer ${OPTS.PLAYSTRATEGY_API_TOKEN}`,
     'User-Agent': USER_AGENT
   };
 
-  const response = await fetch('https://lichess.org/api/stream/event', {headers: headers})
+  const response = await fetch('https://playstrategy.org/api/stream/event', {headers: headers})
   for await (const chunk of response.body) {
     // Ignore keep-alive 1-byte chunks
     if (chunk.length > 1) try {
@@ -42,14 +55,13 @@ async function streamIncomingEvents() {
       let game = json.game;
       // Do not create a prediction if some other process already created one
       if (json.type == 'gameStart' && game.source != 'simul' && game.speed != 'correspondence' && !prediction) {
-        gameColor = game.color;
         gameId = game.id;
         console.log(`Game ${game.id} started!`);
         createPrediction(game);
       }
       if (json.type == 'gameFinish' && game.id == gameId && prediction) {
         console.log(`Game ${game.id} finished!`);
-        endPrediction(game.winner || game.status?.name);
+        endPrediction(game.id);
         gameColor = undefined;
         gameId = undefined;
         prediction = undefined;
@@ -73,10 +85,15 @@ async function getPrediction() {
 }
 
 async function createPrediction(game) {
+  game = await getPlayStrategyGame(game.id);
+  p1 = game.players.p1;
+  p2 = game.players.p2;
+  gameColor = p1.user?.name == playstrategyName ? 'p1' : 'p2';
+  opponent = p1.user?.name == playstrategyName ? p2 : p1;
   prediction = await api.predictions.createPrediction(broadcaster, {
     title: `Who will win? #${game.id}`,
-    outcomes: [lichessName, game.opponent.username, "Draw"],
-    autoLockAfter: Math.min(game.secondsLeft, OPTS.PREDICTION_PERIOD)
+    outcomes: [playstrategyName, opponent.aiLevel ? 'AI' : opponent.user.name, "Draw"],
+    autoLockAfter: Math.min(game.clock.totalTime, OPTS.PREDICTION_PERIOD)
   });
   console.log(`- Prediction ${prediction.id} is ${prediction.status}`);
 }
@@ -89,23 +106,24 @@ async function resolvePrediction(predictionId, outcomeId) {
   return await api.predictions.resolvePrediction(broadcaster, predictionId, outcomeId);
 }
 
-async function endPrediction(outcome) {
+async function endPrediction(gameId) {
   const predictionId = prediction.id;
   const outcomes = prediction.outcomes;
+  game = await getPlayStrategyGame(gameId);
   let outcomeId;
-  switch (outcome) {
+  switch (game.winner || game.status?.name) {
     case gameColor:
-      console.log(`- ${lichessName} won!`);
+      console.log(`- ${playstrategyName} won!`);
       outcomeId = outcomes[0].id;
       break;
-    case 'black':
-    case 'white':
-      console.log(`- ${lichessName} lost!`);
+    case 'p1':
+    case 'p2':
+      console.log(`- ${playstrategyName} lost!`);
       outcomeId = outcomes[1].id;
       break;
     case 'draw':
     case 'stalemate':
-      console.log(`- ${lichessName} drew!`);
+      console.log(`- ${playstrategyName} drew!`);
       outcomeId = outcomes[2].id;
       break;
     default:
@@ -122,5 +140,5 @@ async function endPrediction(outcome) {
 
 getBroadcaster()
   .then(_ => getPrediction())
-  .then(_ => getLichessId())
+  .then(_ => getPlayStrategyId())
   .then(_ => streamIncomingEvents());
