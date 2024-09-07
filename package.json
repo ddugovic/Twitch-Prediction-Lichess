@@ -1,7 +1,7 @@
 {
   "name": "lichessprediction",
   "version": "1.0.0",
-  "description": "",
+  "description": "Create Twitch affiliate/partner channel predictions for timed Lichess games",
   "main": "index.js",
   "scripts": {
     "prestart": "npm install",
@@ -9,6 +9,11 @@
     "stop": "if git pull origin master | grep 'package'; then npm install && npm cache clean --force; fi",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "keywords": [
+    "lichess",
+    "twitch",
+    "bot"
+  ],
   "author": "Andrew Yatzkan",
   "license": "ISC",
   "dependencies": {
