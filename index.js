@@ -1,13 +1,9 @@
-// vvvv for debugging
-process.on('unhandledRejection', (reason, p) => {
-  console.log('Unhandled Rejection at: Promise', p, 'reason:', reason);
-});
-
 const OPTS = require('./config.js');
 const USER_AGENT = 'Twitch-Prediction-Lichess';
 
 let lichessName;
 let gameColor;
+let gameId;
 
 const { StaticAuthProvider } = require('@twurple/auth');
 const { ApiClient } = require('@twurple/api');
@@ -51,15 +47,17 @@ function streamIncomingEvents() {
           let json = JSON.parse(data);
           // TODO: simultaneous exhibition (score prediction)
           let game = json.game;
-          if (json.type == 'gameStart' && game.speed != 'correspondence' && !prediction) {
-            console.log(`Game ${game.id} started!`);
+          if (json.type == 'gameStart' && game.source != 'simul' && game.speed != 'correspondence' && !prediction) {
             gameColor = game.color;
+            gameId = game.id;
+            console.log(`Game ${game.id} started!`);
             createPrediction(game);
           }
-          // assume only one timed game can be played concurrently
-          if (json.type == 'gameFinish' && game.speed != 'correspondence' && prediction) {
+          if (json.type == 'gameFinish' && game.id == gameId && prediction) {
             console.log(`Game ${game.id} finished!`);
             endPrediction(game.winner || game.status?.name);
+            gameColor = undefined;
+            gameId = undefined;
             prediction = undefined;
           }
         } catch (e) {
