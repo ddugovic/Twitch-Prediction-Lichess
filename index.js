@@ -9,43 +9,28 @@ const USER_AGENT = 'Twitch-Prediction-Lichess';
 let lichessName;
 let gameColor;
 let gameSecondsLeft;
-let predictionId;
-let outcomes;
 
 const { StaticAuthProvider } = require('@twurple/auth');
 const { ApiClient } = require('@twurple/api');
 
 const authProvider = new StaticAuthProvider(OPTS.TWITCH_API_CLIENT_ID, OPTS.TWITCH_API_TOKEN, ['channel:read:predictions', 'channel:manage:predictions']);
-const apiClient = new ApiClient({ authProvider });
+const api = new ApiClient({ authProvider });
+let broadcaster;
+let prediction;
 
-// module to send http requests / communicate with the lichess api
+// lichess api client module
 const https = require('https');
 
-function getLichessId() {
+async function getLichessId() {
   // https://lichess.org/api#tag/Account/operation/accountMe
-  const options = {
-    hostname: 'lichess.org',
-    path: '/api/account',
-    headers: {
-      Authorization: `Bearer ${OPTS.LICHESS_API_TOKEN}`,
-      'User-Agent': USER_AGENT
-    }
+  const headers = {
+    Authorization: `Bearer ${OPTS.LICHESS_API_TOKEN}`,
+    'User-Agent': USER_AGENT
   };
 
-  return new Promise((resolve, reject) => {
-    var req = https.request(options, (res) => {
-      res.on('data', (chunk) => {
-        let data = chunk.toString();
-        try {
-          let json = JSON.parse(data);
-          lichessName = json.username;
-        } catch (e) {
-          console.error(e);
-        }
-      });
-    });
-    req.end();
-  });
+  lichessName = await fetch('https://lichess.org/api/account', {headers: headers})
+  .then((res) => res.json())
+  .then(json => json.username);
 }
 
 function streamIncomingEvents() {
@@ -68,17 +53,16 @@ function streamIncomingEvents() {
           // TODO: simultaneous exhibition (score prediction)
           // assume only one timed game can be played concurrently
           let game = json.game;
-          if (json.type == 'gameStart' && game.speed != 'correspondence') {
+          if (json.type == 'gameStart' && game.speed != 'correspondence' && !prediction) {
             console.log(`Game ${game.id} started!`);
             gameColor = game.color;
             gameSecondsLeft = game.secondsLeft;
             createPrediction(game.opponent);
           }
-          if (json.type == 'gameFinish' && game.speed != 'correspondence' && predictionId) {
+          if (json.type == 'gameFinish' && game.speed != 'correspondence' && prediction) {
             console.log(`Game ${game.id} finished!`);
-            endPrediction(game.winner || game.status?.name, predictionId, outcomes);
-            predictionId = undefined;
-            outcomes = undefined;
+            endPrediction(game.winner || game.status?.name);
+            prediction = undefined;
           }
         } catch (e) {
           console.error(e);
@@ -91,28 +75,38 @@ function streamIncomingEvents() {
   });
 }
 
+async function getBroadcaster() {
+  broadcaster = await api.users.getUserByName(OPTS.TWITCH_CHANNEL);
+}
+
+async function getPrediction() {
+  const predictions = await api.predictions.getPredictions(broadcaster, {limit: 1});
+  if (predictions?.data?.length && /^(?:ACTIVE|LOCKED)$/.test(predictions.data[0].status)) {
+    prediction = predictions.data[0];
+  }
+  return predictions;
+}
+
 async function createPrediction(opponent) {
-  const broadcaster = await apiClient.users.getUserByName(OPTS.TWITCH_CHANNEL);
-  const prediction = await apiClient.predictions.createPrediction(broadcaster, {
+  prediction = await api.predictions.createPrediction(broadcaster, {
     title: "Who will win?",
     outcomes: [lichessName, opponent.username, "Draw"],
     autoLockAfter: Math.min(gameSecondsLeft, OPTS.PREDICTION_PERIOD)
   });
   console.log(`- Prediction ${prediction.id} is ${prediction.status}`);
-  predictionId = prediction.id;
-  outcomes = prediction.outcomes;
 }
 
-async function cancelPrediction(broadcaster, predictionId) {
-  return await apiClient.predictions.cancelPrediction(broadcaster, predictionId);
+async function cancelPrediction(predictionId) {
+  return await api.predictions.cancelPrediction(broadcaster, predictionId);
 }
 
-async function resolvePrediction(broadcaster, predictionId, outcomeId) {
-  return await apiClient.predictions.resolvePrediction(broadcaster, predictionId, outcomeId);
+async function resolvePrediction(predictionId, outcomeId) {
+  return await api.predictions.resolvePrediction(broadcaster, predictionId, outcomeId);
 }
 
-async function endPrediction(outcome, predictionId, outcomes) {
-  const broadcaster = await apiClient.users.getUserByName(OPTS.TWITCH_CHANNEL);
+async function endPrediction(outcome) {
+  const predictionId = prediction.id;
+  const outcomes = prediction.outcomes;
   let outcomeId;
   switch (outcome) {
     case gameColor:
@@ -132,14 +126,16 @@ async function endPrediction(outcome, predictionId, outcomes) {
     default:
       console.log(`- Game ${outcome}!`);
   }
-  let prediction;
   if (outcomeId) {
-    prediction = resolvePrediction(broadcaster, predictionId, outcomeId);
+    resolvePrediction(predictionId, outcomeId);
+    console.log(`- Prediction ${predictionId} resolved.`);
   } else {
-    prediction = cancelPrediction(broadcaster, predictionId);
+    cancelPrediction(predictionId);
+    console.log(`- Prediction ${predictionId} canceled.`);
   }
-  console.log(`- Prediction ${predictionId} is ${prediction.status ?? 'CANCELED'}`);
 }
 
-getLichessId();
-streamIncomingEvents();
+getBroadcaster()
+  .then(_ => getPrediction())
+  .then(_ => getLichessId())
+  .then(_ => streamIncomingEvents());
