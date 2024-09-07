@@ -1,5 +1,5 @@
 const OPTS = require('./config.js');
-const USER_AGENT = 'Twitch-Prediction-Lichess';
+const USER_AGENT = 'Twitch-Prediction-Lishogi';
 
 const { StaticAuthProvider } = require('@twurple/auth');
 const { ApiClient } = require('@twurple/api');
@@ -9,31 +9,43 @@ const api = new ApiClient({ authProvider });
 let broadcaster;
 let prediction;
 
-let lichessName;
+let lishogiName;
 let gameColor;
 let gameId;
 
-async function getLichessId() {
-  // https://lichess.org/api#tag/Account/operation/accountMe
+async function getLishogiId() {
+  // https://lishogi.org/api#tag/Account/operation/accountMe
   const headers = {
-    Authorization: `Bearer ${OPTS.LICHESS_API_TOKEN}`,
+    Authorization: `Bearer ${OPTS.LISHOGI_API_TOKEN}`,
     'User-Agent': USER_AGENT
   };
 
-  user = await fetch('https://lichess.org/api/account', {headers: headers})
+  user = await fetch('https://lishogi.org/api/account', {headers: headers})
     .then((res) => res.json());
-  console.log(`Lichess streamer: ${user?.streamer?.twitch?.channel}`);
-  lichessName = user.title ? `${user.title} ${user.username}` : user.username;
+  console.log(`Lishogi user: ${user.username}`);
+  lishogiName = user.title ? `${user.title} ${user.username}` : user.username;
+}
+
+async function getLishogiGame(gameId) {
+  // https://lishogi.org/api/account/playing
+  const headers = {
+    Authorization: `Bearer ${OPTS.LISHOGI_API_TOKEN}`,
+    'User-Agent': USER_AGENT
+  };
+
+  return await fetch('https://lishogi.org/api/account/playing?nb=1', {headers: headers})
+    .then((res) => res.json())
+    .then(json => json.nowPlaying[0]);
 }
 
 async function streamIncomingEvents() {
-  // https://lichess.org/api#tag/Board/operation/apiStreamEvent
+  // https://lishogi.org/api#tag/Board/operation/apiStreamEvent
   const headers = {
-    Authorization: `Bearer ${OPTS.LICHESS_API_TOKEN}`,
+    Authorization: `Bearer ${OPTS.LISHOGI_API_TOKEN}`,
     'User-Agent': USER_AGENT
   };
 
-  const response = await fetch('https://lichess.org/api/stream/event', {headers: headers})
+  const response = await fetch('https://lishogi.org/api/stream/event', {headers: headers})
   for await (const chunk of response.body) {
     // Ignore keep-alive 1-byte chunks
     if (chunk.length > 1) try {
@@ -73,9 +85,13 @@ async function getPrediction() {
 }
 
 async function createPrediction(game) {
+  // Future work: enhance Lishogi API to enrich gameStart notification
+  // (since getting a game may return correspondence or simul games).
+  game = await getLishogiGame(game.id);
+  console.log(game);
   prediction = await api.predictions.createPrediction(broadcaster, {
     title: `Who will win? #${game.id}`,
-    outcomes: [lichessName, game.opponent.username, "Draw"],
+    outcomes: [lishogiName, game.opponent.username, "Draw"],
     autoLockAfter: Math.min(game.secondsLeft, OPTS.PREDICTION_PERIOD)
   });
   console.log(`- Prediction ${prediction.id} is ${prediction.status}`);
@@ -95,17 +111,16 @@ async function endPrediction(outcome) {
   let outcomeId;
   switch (outcome) {
     case gameColor:
-      console.log(`- ${lichessName} won!`);
+      console.log(`- ${lishogiName} won!`);
       outcomeId = outcomes[0].id;
       break;
-    case 'black':
-    case 'white':
-      console.log(`- ${lichessName} lost!`);
+    case 'gote':
+    case 'sente':
+      console.log(`- ${lishogiName} lost!`);
       outcomeId = outcomes[1].id;
       break;
     case 'draw':
-    case 'stalemate':
-      console.log(`- ${lichessName} drew!`);
+      console.log(`- ${lishogiName} drew!`);
       outcomeId = outcomes[2].id;
       break;
     default:
@@ -122,5 +137,5 @@ async function endPrediction(outcome) {
 
 getBroadcaster()
   .then(_ => getPrediction())
-  .then(_ => getLichessId())
+  .then(_ => getLishogiId())
   .then(_ => streamIncomingEvents());
