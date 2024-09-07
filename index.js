@@ -8,7 +8,6 @@ const USER_AGENT = 'Twitch-Prediction-Lichess';
 
 let lichessName;
 let gameColor;
-let gameSecondsLeft;
 
 const { StaticAuthProvider } = require('@twurple/auth');
 const { ApiClient } = require('@twurple/api');
@@ -28,9 +27,9 @@ async function getLichessId() {
     'User-Agent': USER_AGENT
   };
 
-  lichessName = await fetch('https://lichess.org/api/account', {headers: headers})
-  .then((res) => res.json())
-  .then(json => json.username);
+  user = await fetch('https://lichess.org/api/account', {headers: headers})
+  .then((res) => res.json());
+  lichessName = user.title ? `${user.title} ${user.username}` : user.username;
 }
 
 function streamIncomingEvents() {
@@ -51,14 +50,13 @@ function streamIncomingEvents() {
         if (data.length > 1) try {
           let json = JSON.parse(data);
           // TODO: simultaneous exhibition (score prediction)
-          // assume only one timed game can be played concurrently
           let game = json.game;
           if (json.type == 'gameStart' && game.speed != 'correspondence' && !prediction) {
             console.log(`Game ${game.id} started!`);
             gameColor = game.color;
-            gameSecondsLeft = game.secondsLeft;
-            createPrediction(game.opponent);
+            createPrediction(game);
           }
+          // assume only one timed game can be played concurrently
           if (json.type == 'gameFinish' && game.speed != 'correspondence' && prediction) {
             console.log(`Game ${game.id} finished!`);
             endPrediction(game.winner || game.status?.name);
@@ -87,11 +85,11 @@ async function getPrediction() {
   return predictions;
 }
 
-async function createPrediction(opponent) {
+async function createPrediction(game) {
   prediction = await api.predictions.createPrediction(broadcaster, {
-    title: "Who will win?",
-    outcomes: [lichessName, opponent.username, "Draw"],
-    autoLockAfter: Math.min(gameSecondsLeft, OPTS.PREDICTION_PERIOD)
+    title: `Who will win? #${game.id}`,
+    outcomes: [lichessName, game.opponent.username, "Draw"],
+    autoLockAfter: Math.min(game.secondsLeft, OPTS.PREDICTION_PERIOD)
   });
   console.log(`- Prediction ${prediction.id} is ${prediction.status}`);
 }
