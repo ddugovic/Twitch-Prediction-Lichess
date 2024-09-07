@@ -1,10 +1,6 @@
 const OPTS = require('./config.js');
 const USER_AGENT = 'Twitch-Prediction-Lichess';
 
-let lichessName;
-let gameColor;
-let gameId;
-
 const { StaticAuthProvider } = require('@twurple/auth');
 const { ApiClient } = require('@twurple/api');
 
@@ -13,8 +9,9 @@ const api = new ApiClient({ authProvider });
 let broadcaster;
 let prediction;
 
-// lichess api client module
-const https = require('https');
+let lichessName;
+let gameColor;
+let gameId;
 
 async function getLichessId() {
   // https://lichess.org/api#tag/Account/operation/accountMe
@@ -24,51 +21,43 @@ async function getLichessId() {
   };
 
   user = await fetch('https://lichess.org/api/account', {headers: headers})
-  .then((res) => res.json());
+    .then((res) => res.json());
+  console.log(`Lichess streamer: ${user?.streamer?.twitch?.channel}`);
   lichessName = user.title ? `${user.title} ${user.username}` : user.username;
 }
 
-function streamIncomingEvents() {
+async function streamIncomingEvents() {
   // https://lichess.org/api#tag/Board/operation/apiStreamEvent
-  const options = {
-    hostname: 'lichess.org',
-    path: '/api/stream/event',
-    headers: {
-      Authorization: `Bearer ${OPTS.LICHESS_API_TOKEN}`,
-      'User-Agent': USER_AGENT
-    }
+  const headers = {
+    Authorization: `Bearer ${OPTS.LICHESS_API_TOKEN}`,
+    'User-Agent': USER_AGENT
   };
 
-  return new Promise((resolve, reject) => {
-    https.get(options, (res) => {
-      res.on('data', (chunk) => {
-        let data = chunk.toString();
-        if (data.length > 1) try {
-          let json = JSON.parse(data);
-          // TODO: simultaneous exhibition (score prediction)
-          let game = json.game;
-          if (json.type == 'gameStart' && game.source != 'simul' && game.speed != 'correspondence' && !prediction) {
-            gameColor = game.color;
-            gameId = game.id;
-            console.log(`Game ${game.id} started!`);
-            createPrediction(game);
-          }
-          if (json.type == 'gameFinish' && game.id == gameId && prediction) {
-            console.log(`Game ${game.id} finished!`);
-            endPrediction(game.winner || game.status?.name);
-            gameColor = undefined;
-            gameId = undefined;
-            prediction = undefined;
-          }
-        } catch (e) {
-          console.error(e);
-        }
-      });
-      res.on('end', () => {
-        reject(new Error('[streamIncomingEvents()] Stream ended.'));
-      });
-    });
-  });
+  const response = await fetch('https://lichess.org/api/stream/event', {headers: headers})
+  for await (const chunk of response.body) {
+    // Ignore keep-alive 1-byte chunks
+    if (chunk.length > 1) try {
+      const data = Buffer.from(chunk).toString('utf8');
+      let json = JSON.parse(data);
+      let game = json.game;
+      // Do not create a prediction if some other process already created one
+      if (json.type == 'gameStart' && game.source != 'simul' && game.speed != 'correspondence' && !prediction) {
+        gameColor = game.color;
+        gameId = game.id;
+        console.log(`Game ${game.id} started!`);
+        createPrediction(game);
+      }
+      if (json.type == 'gameFinish' && game.id == gameId && prediction) {
+        console.log(`Game ${game.id} finished!`);
+        endPrediction(game.winner || game.status?.name);
+        gameColor = undefined;
+        gameId = undefined;
+        prediction = undefined;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
 }
 
 async function getBroadcaster() {
