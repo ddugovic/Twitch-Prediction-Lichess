@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "prestart": "npm install",
-    "update": "if git pull origin master | grep 'package'; then npm install && npm cache clean --force; fi",
     "start": "node index.js",
+    "stop": "if git pull origin master | grep 'package'; then npm install && npm cache clean --force; fi",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Andrew Yatzkan",
