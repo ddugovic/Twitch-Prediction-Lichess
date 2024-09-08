@@ -88,7 +88,6 @@ async function createPrediction(game) {
   p1 = game.players.p1;
   p2 = game.players.p2;
   gameColor = p1.user?.name == playstrategyName ? 'p1' : 'p2';
-console.log(gameColor);
   opponent = p1.user?.name == playstrategyName ? p2 : p1;
   prediction = await api.predictions.createPrediction(broadcaster, {
     title: `Who will win? #${game.id}`,
