@@ -9,7 +9,7 @@ const api = new ApiClient({ authProvider });
 let broadcaster;
 let prediction;
 
-let playstrategyName;
+let user, username;
 let p1, p2;
 let gameColor;
 let gameId;
@@ -23,8 +23,8 @@ async function getPlayStrategyId() {
 
   user = await fetch('https://playstrategy.org/api/account', {headers: headers})
     .then((res) => res.json());
-  console.log(`PlayStrategy user: ${user.username}`);
-  playstrategyName = user.title ? `${user.title} ${user.username}` : user.username;
+  username = user.username;
+  console.log(`PlayStrategy username: ${username}`);
 }
 
 async function getPlayStrategyGame(gameId) {
@@ -87,14 +87,23 @@ async function createPrediction(game) {
   game = await getPlayStrategyGame(game.id);
   p1 = game.players.p1;
   p2 = game.players.p2;
-  gameColor = p1.user?.name == playstrategyName ? 'p1' : 'p2';
-  opponent = p1.user?.name == playstrategyName ? p2 : p1;
+  gameColor = p1.user?.name == username ? 'p1' : 'p2';
+  opponent = p1.user?.name == username ? p2 : p1;
   prediction = await api.predictions.createPrediction(broadcaster, {
     title: `Who will win? #${game.id}`,
-    outcomes: [playstrategyName, opponent.aiLevel ? 'AI' : opponent.user.name, "Draw"],
+    outcomes: [getName(user), getPlayerName(opponent), "Draw"],
     autoLockAfter: Math.min(game.clock.totalTime, OPTS.PREDICTION_PERIOD)
   });
   console.log(`- Prediction ${prediction.id} is ${prediction.status}`);
+}
+
+function getName(user) {
+  return user.title ? `${user.title} ${user.name ?? user.username}` :
+         user.name ?? user.username;
+}
+
+function getPlayerName(player) {
+  return player.ai ? 'AI level ' + player.ai.level : getName(player.user);
 }
 
 async function cancelPrediction(predictionId) {
@@ -112,17 +121,17 @@ async function endPrediction(gameId) {
   let outcomeId;
   switch (game.winner || game.status) {
     case gameColor:
-      console.log(`- ${playstrategyName} won!`);
+      console.log(`- ${username} won!`);
       outcomeId = outcomes[0].id;
       break;
     case 'p1':
     case 'p2':
-      console.log(`- ${playstrategyName} lost!`);
+      console.log(`- ${username} lost!`);
       outcomeId = outcomes[1].id;
       break;
     case 'draw':
     case 'stalemate':
-      console.log(`- ${playstrategyName} drew!`);
+      console.log(`- ${username} drew!`);
       outcomeId = outcomes[2].id;
       break;
     default:
