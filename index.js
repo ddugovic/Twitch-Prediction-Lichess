@@ -26,18 +26,6 @@ async function getLishogiId() {
   lishogiName = user.title ? `${user.title} ${user.username}` : user.username;
 }
 
-async function getLishogiGame(gameId) {
-  // https://lishogi.org/api/account/playing
-  const headers = {
-    Authorization: `Bearer ${OPTS.LISHOGI_API_TOKEN}`,
-    'User-Agent': USER_AGENT
-  };
-
-  return await fetch('https://lishogi.org/api/account/playing?nb=1', {headers: headers})
-    .then((res) => res.json())
-    .then(json => json.nowPlaying[0]);
-}
-
 async function streamIncomingEvents() {
   // https://lishogi.org/api#tag/Board/operation/apiStreamEvent
   const headers = {
@@ -61,7 +49,7 @@ async function streamIncomingEvents() {
       }
       if (json.type == 'gameFinish' && game.id == gameId && prediction) {
         console.log(`Game ${game.id} finished!`);
-        endPrediction(game.winner || game.status);
+        endPrediction(game.winner || game.status?.name);
         gameColor = undefined;
         gameId = undefined;
         prediction = undefined;
@@ -85,10 +73,6 @@ async function getPrediction() {
 }
 
 async function createPrediction(game) {
-  // Future work: enhance Lishogi API to enrich gameStart notification
-  // (since getting a game may return correspondence or simul games).
-  game = await getLishogiGame(game.id);
-  console.log(game);
   prediction = await api.predictions.createPrediction(broadcaster, {
     title: `Who will win? #${game.id}`,
     outcomes: [lishogiName, game.opponent.username, "Draw"],
