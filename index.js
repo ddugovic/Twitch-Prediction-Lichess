@@ -10,9 +10,8 @@ let broadcaster;
 let prediction;
 
 let user, username;
-let p1, p2;
-let gameColor;
 let gameId;
+let playerIndex;
 
 async function getPlayStrategyId() {
   // https://playstrategy.org/api#tag/Account/operation/accountMe
@@ -25,18 +24,6 @@ async function getPlayStrategyId() {
     .then((res) => res.json());
   username = user.username;
   console.log(`PlayStrategy username: ${username}`);
-}
-
-async function getPlayStrategyGame(gameId) {
-  // https://playstrategy.org/game/export/{gameId}
-  const headers = {
-    Accept: 'application/json',
-    Authorization: `Bearer ${OPTS.LISHOGI_API_TOKEN}`,
-    'User-Agent': USER_AGENT
-  };
-
-  return await fetch(`https://playstrategy.org/game/export/${gameId}`, {headers: headers})
-    .then((res) => res.json());
 }
 
 async function streamIncomingEvents() {
@@ -61,7 +48,7 @@ async function streamIncomingEvents() {
       }
       if (json.type == 'gameFinish' && game.id == gameId && prediction) {
         console.log(`Game ${game.id} finished!`);
-        endPrediction(game.id);
+        endPrediction(game.winnerPlayerIndex || game.status?.name);
         gameId = undefined;
         prediction = undefined;
       }
@@ -84,15 +71,12 @@ async function getPrediction() {
 }
 
 async function createPrediction(game) {
-  game = await getPlayStrategyGame(game.id);
-  p1 = game.players.p1;
-  p2 = game.players.p2;
-  gameColor = p1.user?.name == username ? 'p1' : 'p2';
-  opponent = p1.user?.name == username ? p2 : p1;
+  playerIndex = game.playerIndex;
+  opponent = game.opponent;
   prediction = await api.predictions.createPrediction(broadcaster, {
     title: `Who will win? #${game.id}`,
-    outcomes: [getName(user), getPlayerName(opponent), "Draw"],
-    autoLockAfter: Math.min(game.clock.totalTime, OPTS.PREDICTION_PERIOD)
+    outcomes: [getName(user), game.opponent.username, "Draw"],
+    autoLockAfter: Math.min(game.secondsLeft, OPTS.PREDICTION_PERIOD)
   });
   console.log(`- Prediction ${prediction.id} is ${prediction.status}`);
 }
@@ -100,10 +84,6 @@ async function createPrediction(game) {
 function getName(user) {
   return user.title ? `${user.title} ${user.name ?? user.username}` :
          user.name ?? user.username;
-}
-
-function getPlayerName(player) {
-  return player.ai ? 'AI level ' + player.ai.level : getName(player.user);
 }
 
 async function cancelPrediction(predictionId) {
@@ -114,13 +94,12 @@ async function resolvePrediction(predictionId, outcomeId) {
   return await api.predictions.resolvePrediction(broadcaster, predictionId, outcomeId);
 }
 
-async function endPrediction(gameId) {
+async function endPrediction(outcome) {
   const predictionId = prediction.id;
   const outcomes = prediction.outcomes;
-  game = await getPlayStrategyGame(gameId);
   let outcomeId;
-  switch (game.winner || game.status) {
-    case gameColor:
+  switch (outcome) {
+    case playerIndex:
       console.log(`- ${username} won!`);
       outcomeId = outcomes[0].id;
       break;
@@ -135,7 +114,7 @@ async function endPrediction(gameId) {
       outcomeId = outcomes[2].id;
       break;
     default:
-      console.log(`- Game ${game.status}!`);
+      console.log(`- Game ${outcome}!`);
   }
   if (outcomeId) {
     resolvePrediction(predictionId, outcomeId);
