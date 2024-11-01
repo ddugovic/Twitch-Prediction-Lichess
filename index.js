@@ -84,7 +84,7 @@ function getName(user) {
 }
 
 function getPlayerName(player) {
-  return player.ai ? 'AI level ' + player.ai : getName(player.user);
+  return player.ai ? 'AI level ' + player.ai : player.username;
 }
 
 async function cancelPrediction(predictionId) {
